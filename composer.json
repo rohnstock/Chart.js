@@ -1,0 +1,21 @@
+{
+    "name": "rohnstock/chartjs",
+    "description": "Simple HTML5 Charts using the canvas element.",
+    "type": "component",
+    "homepage": "https://github.com/nnnick/Chart.js",
+    "license": "MIT",
+    "keywords": [
+        "charts"
+    ],
+    "author": {
+        "url": "http://www.chartjs.org/",
+        "name": "nnnick"
+    },
+    "extra": {
+        "component": {
+            "files": [
+                "js/Chart.min.js"
+            ]
+        }
+    }
+}
