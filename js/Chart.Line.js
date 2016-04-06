@@ -50,7 +50,7 @@
 		datasetFill : true,
 
 		//String - A legend template
-		legendTemplate : "<ul class=\"<%=name.toLowerCase()%>-legend\"><% for (var i=0; i<datasets.length; i++){%><li><span style=\"background-color:<%=datasets[i].strokeColor%>\"><%if(datasets[i].label){%><%=datasets[i].label%><%}%></span></li><%}%></ul>",
+		legendTemplate : "<ul class=\"<%=name.toLowerCase()%>-legend\"><% for (var i=0; i<datasets.length; i++){%><li><span class=\"<%=name.toLowerCase()%>-legend-icon\" style=\"background-color:<%=datasets[i].strokeColor%>\"></span><span class=\"<%=name.toLowerCase()%>-legend-text\"><%if(datasets[i].label){%><%=datasets[i].label%><%}%></span></li><%}%></ul>",
 
 		//Boolean - Whether to horizontally center the label and point dot inside the grid
 		offsetGridLines : false
@@ -275,6 +275,7 @@
 				return helpers.findPreviousWhere(collection, hasValue, index) || point;
 			};
 
+			if (!this.scale) return;
 			this.scale.draw(easingDecimal);
 
 
@@ -294,7 +295,7 @@
 				},this);
 
 
-				// Control points need to be calculated in a seperate loop, because we need to know the current x/y of the point
+				// Control points need to be calculated in a separate loop, because we need to know the current x/y of the point
 				// This would cause issues when there is no animation, because the y of the next point would be 0, so beziers would be skewed
 				if (this.options.bezierCurve){
 					helpers.each(pointsWithValues, function(point, index){
@@ -355,7 +356,9 @@
 					}
 				}, this);
 
-				ctx.stroke();
+				if (this.options.datasetStroke) {
+					ctx.stroke();
+				}
 
 				if (this.options.datasetFill && pointsWithValues.length > 0){
 					//Round off the line by going to the base of the chart, back to the start, then fill.

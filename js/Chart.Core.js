@@ -40,12 +40,6 @@
 		var width = this.width = computeDimension(context.canvas,'Width') || context.canvas.width;
 		var height = this.height = computeDimension(context.canvas,'Height') || context.canvas.height;
 
-		// Firefox requires this to work correctly
-		context.canvas.width  = width;
-		context.canvas.height = height;
-
-		width = this.width = context.canvas.width;
-		height = this.height = context.canvas.height;
 		this.aspectRatio = this.width / this.height;
 		//High pixel density displays - multiply the size of the canvas height/width by the device pixel ratio, then scale.
 		helpers.retinaScale(this);
@@ -150,6 +144,9 @@
 			// String - Tooltip title font colour
 			tooltipTitleFontColor: "#fff",
 
+			// String - Tooltip title template
+			tooltipTitleTemplate: "<%= label%>",
+
 			// Number - pixel width of padding around tooltip text
 			tooltipYPadding: 6,
 
@@ -169,10 +166,16 @@
 			tooltipTemplate: "<%if (label){%><%=label%>: <%}%><%= value %>",
 
 			// String - Template string for single tooltips
-			multiTooltipTemplate: "<%= value %>",
+			multiTooltipTemplate: "<%= datasetLabel %>: <%= value %>",
 
 			// String - Colour behind the legend colour block
 			multiTooltipKeyBackground: '#fff',
+
+			// Array - A list of colors to use as the defaults
+			segmentColorDefault: ["#A6CEE3", "#1F78B4", "#B2DF8A", "#33A02C", "#FB9A99", "#E31A1C", "#FDBF6F", "#FF7F00", "#CAB2D6", "#6A3D9A", "#B4B482", "#B15928" ],
+
+			// Array - A list of highlight colors to use as the defaults
+			segmentHighlightColorDefaults: [ "#CEF6FF", "#47A0DC", "#DAFFB2", "#5BC854", "#FFC2C1", "#FF4244", "#FFE797", "#FFA728", "#F2DAFE", "#9265C2", "#DCDCAA", "#D98150" ],
 
 			// Function - Will fire on animation progression.
 			onAnimationProgress: function(){},
@@ -404,10 +407,15 @@
 				maxSteps = Math.floor(drawingSize/(textSize * 1.5)),
 				skipFitting = (minSteps >= maxSteps);
 
-			var maxValue = max(valuesArray),
-				minValue = min(valuesArray);
+			// Filter out null values since these would min() to zero
+			var values = [];
+			each(valuesArray, function( v ){
+				v == null || values.push( v );
+			});
+			var minValue = min(values),
+			    maxValue = max(values);
 
-			// We need some degree of seperation here to calculate the scales if all the values are the same
+			// We need some degree of separation here to calculate the scales if all the values are the same
 			// Adding/minusing 0.5 will give us a range of 1.
 			if (maxValue === minValue){
 				maxValue += 0.5;
@@ -829,13 +837,13 @@
 			var container = domNode.parentNode,
 			    padding = parseInt(getStyle(container, 'padding-left')) + parseInt(getStyle(container, 'padding-right'));
 			// TODO = check cross browser stuff with this.
-			return container.clientWidth - padding;
+			return container ? container.clientWidth - padding : 0;
 		},
 		getMaximumHeight = helpers.getMaximumHeight = function(domNode){
 			var container = domNode.parentNode,
 			    padding = parseInt(getStyle(container, 'padding-bottom')) + parseInt(getStyle(container, 'padding-top'));
 			// TODO = check cross browser stuff with this.
-			return container.clientHeight - padding;
+			return container ? container.clientHeight - padding : 0;
 		},
 		getStyle = helpers.getStyle = function (el, property) {
 			return el.currentStyle ?
@@ -967,9 +975,10 @@
 			return this;
 		},
 		generateLegend : function(){
-			return template(this.options.legendTemplate,this);
+			return helpers.template(this.options.legendTemplate, this);
 		},
 		destroy : function(){
+			this.stop();
 			this.clear();
 			unbindEvents(this, this.events);
 			var canvas = this.chart.canvas;
@@ -1097,7 +1106,7 @@
 						labels: tooltipLabels,
 						legendColors: tooltipColors,
 						legendColorBackground : this.options.multiTooltipKeyBackground,
-						title: ChartElements[0].label,
+						title: template(this.options.tooltipTitleTemplate,ChartElements[0]),
 						chart: this.chart,
 						ctx: this.chart.ctx,
 						custom: this.options.customTooltips
@@ -1281,9 +1290,18 @@
 				y: chartY
 			});
 
+			// Normalize all angles to 0 - 2*PI (0 - 360°)
+			var pointRelativeAngle = pointRelativePosition.angle % (Math.PI * 2),
+			    startAngle = (Math.PI * 2 + this.startAngle) % (Math.PI * 2),
+			    endAngle = (Math.PI * 2 + this.endAngle) % (Math.PI * 2) || 360;
+
+			// Calculate wether the pointRelativeAngle is between the start and the end angle
+			var betweenAngles = (endAngle < startAngle) ?
+				pointRelativeAngle <= endAngle || pointRelativeAngle >= startAngle:
+				pointRelativeAngle >= startAngle && pointRelativeAngle <= endAngle;
+
 			//Check if within the range of the open/close angle
-			var betweenAngles = (pointRelativePosition.angle >= this.startAngle && pointRelativePosition.angle <= this.endAngle),
-				withinRadius = (pointRelativePosition.distance >= this.innerRadius && pointRelativePosition.distance <= this.outerRadius);
+			var withinRadius = (pointRelativePosition.distance >= this.innerRadius && pointRelativePosition.distance <= this.outerRadius);
 
 			return (betweenAngles && withinRadius);
 			//Ensure within the outside of the arc centre, but inside arc outer
@@ -1304,9 +1322,9 @@
 
 			ctx.beginPath();
 
-			ctx.arc(this.x, this.y, this.outerRadius, this.startAngle, this.endAngle);
+			ctx.arc(this.x, this.y, this.outerRadius < 0 ? 0 : this.outerRadius, this.startAngle, this.endAngle);
 
-			ctx.arc(this.x, this.y, this.innerRadius, this.endAngle, this.startAngle, true);
+            ctx.arc(this.x, this.y, this.innerRadius < 0 ? 0 : this.innerRadius, this.endAngle, this.startAngle, true);
 
 			ctx.closePath();
 			ctx.strokeStyle = this.strokeColor;
@@ -1464,7 +1482,8 @@
 
 			this.titleFont = fontString(this.titleFontSize,this.titleFontStyle,this.titleFontFamily);
 
-			this.height = (this.labels.length * this.fontSize) + ((this.labels.length-1) * (this.fontSize/2)) + (this.yPadding*2) + this.titleFontSize *1.5;
+			this.titleHeight = this.title ? this.titleFontSize * 1.5 : 0;
+			this.height = (this.labels.length * this.fontSize) + ((this.labels.length-1) * (this.fontSize/2)) + (this.yPadding*2) + this.titleHeight;
 
 			this.ctx.font = this.titleFont;
 
@@ -1500,9 +1519,9 @@
 
 			//If the index is zero, we're getting the title
 			if (index === 0){
-				return baseLineHeight + this.titleFontSize/2;
+				return baseLineHeight + this.titleHeight / 3;
 			} else{
-				return baseLineHeight + ((this.fontSize*1.5*afterTitleIndex) + this.fontSize/2) + this.titleFontSize * 1.5;
+				return baseLineHeight + ((this.fontSize * 1.5 * afterTitleIndex) + this.fontSize / 2) + this.titleHeight;
 			}
 
 		},
@@ -1683,7 +1702,7 @@
 		},
 		calculateY : function(value){
 			var scalingFactor = this.drawingArea() / (this.min - this.max);
-			return Math.round(this.endPoint - (scalingFactor * (value - this.min)));
+			return this.endPoint - (scalingFactor * (value - this.min));
 		},
 		calculateX : function(index){
 			var isRotated = (this.xLabelRotation > 0),
@@ -2036,12 +2055,38 @@
 					ctx.lineWidth = this.angleLineWidth;
 					ctx.strokeStyle = this.angleLineColor;
 					for (var i = this.valuesCount - 1; i >= 0; i--) {
-						if (this.angleLineWidth > 0){
-							var outerPosition = this.getPointPosition(i, this.calculateCenterOffset(this.max));
+						var centerOffset = null, outerPosition = null;
+
+						if (this.angleLineWidth > 0 && (i % this.angleLineInterval === 0)){
+							centerOffset = this.calculateCenterOffset(this.max);
+							outerPosition = this.getPointPosition(i, centerOffset);
 							ctx.beginPath();
 							ctx.moveTo(this.xCenter, this.yCenter);
 							ctx.lineTo(outerPosition.x, outerPosition.y);
 							ctx.stroke();
+							ctx.closePath();
+						}
+
+						if (this.backgroundColors && this.backgroundColors.length == this.valuesCount) {
+							if (centerOffset == null)
+								centerOffset = this.calculateCenterOffset(this.max);
+
+							if (outerPosition == null)
+								outerPosition = this.getPointPosition(i, centerOffset);
+
+							var previousOuterPosition = this.getPointPosition(i === 0 ? this.valuesCount - 1 : i - 1, centerOffset);
+							var nextOuterPosition = this.getPointPosition(i === this.valuesCount - 1 ? 0 : i + 1, centerOffset);
+
+							var previousOuterHalfway = { x: (previousOuterPosition.x + outerPosition.x) / 2, y: (previousOuterPosition.y + outerPosition.y) / 2 };
+							var nextOuterHalfway = { x: (outerPosition.x + nextOuterPosition.x) / 2, y: (outerPosition.y + nextOuterPosition.y) / 2 };
+
+							ctx.beginPath();
+							ctx.moveTo(this.xCenter, this.yCenter);
+							ctx.lineTo(previousOuterHalfway.x, previousOuterHalfway.y);
+							ctx.lineTo(outerPosition.x, outerPosition.y);
+							ctx.lineTo(nextOuterHalfway.x, nextOuterHalfway.y);
+							ctx.fillStyle = this.backgroundColors[i];
+							ctx.fill();
 							ctx.closePath();
 						}
 						// Extra 3px out for some label spacing
@@ -2141,8 +2186,11 @@
 				
 				this.animations[i].animationObject.render(this.animations[i].chartInstance, this.animations[i].animationObject);
 				
+				// Check if executed the last frame.
 				if (this.animations[i].animationObject.currentStep == this.animations[i].animationObject.numSteps){
-					// executed the last frame. Remove the animation.
+					// Call onAnimationComplete
+					this.animations[i].animationObject.onAnimationComplete.call(this.animations[i].chartInstance);
+					// Remove the animation.
 					this.animations.splice(i, 1);
 					// Keep the index in place to offset the splice
 					i--;
@@ -2184,7 +2232,7 @@
 
 
 	if (amd) {
-		define(function(){
+		define('Chart', [], function(){
 			return Chart;
 		});
 	} else if (typeof module === 'object' && module.exports) {
